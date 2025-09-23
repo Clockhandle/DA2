@@ -1,0 +1,21 @@
+# Node modules
+node_modules/
+
+# Compiled C++ executable
+*.exe
+main.exe
+
+# Generated files
+vertices.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*

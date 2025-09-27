@@ -1,0 +1,10 @@
+^D:\THREEJS_TEST\TETGEN-1.5.1\BUILD\CMAKEFILES\5F53522E647C86ED7425AA57A18290A5\GENERATE.STAMP.RULE
+setlocal
+D:\C_make\bin\cmake.exe -SD:/ThreeJS_Test/TetGen-1.5.1 -BD:/ThreeJS_Test/TetGen-1.5.1/build --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file D:/ThreeJS_Test/TetGen-1.5.1/build/Project.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

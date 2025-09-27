@@ -1,0 +1,19 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="16.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="D:\ThreeJS_Test\TetGen-1.5.1\tetgen.cxx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="D:\ThreeJS_Test\TetGen-1.5.1\predicates.cxx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="D:\ThreeJS_Test\TetGen-1.5.1\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{A234A5BB-F80F-3C15-AADB-5615C6ADDC60}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

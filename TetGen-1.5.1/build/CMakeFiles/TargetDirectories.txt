@@ -1,4 +1,0 @@
-D:/ThreeJS_Test/TetGen-1.5.1/build/CMakeFiles/tetgen.dir
-D:/ThreeJS_Test/TetGen-1.5.1/build/CMakeFiles/tet.dir
-D:/ThreeJS_Test/TetGen-1.5.1/build/CMakeFiles/ALL_BUILD.dir
-D:/ThreeJS_Test/TetGen-1.5.1/build/CMakeFiles/ZERO_CHECK.dir

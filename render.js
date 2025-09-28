@@ -75,16 +75,6 @@ loader.load(
             }
         });
 
-        console.log(`Total vertices extracted: ${allVertices.length}`);
-        const jsonVertData = JSON.stringify(allVertices);
-        const dataBlob = new Blob([jsonVertData], { type: 'application/json' });
-        const url = URL.createObjectURL(dataBlob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = 'vertices.json';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
     },
     (xhr) => {
         console.log((xhr.loaded / xhr.total) * 100 + '% loaded');

@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.10)
+project(DA2)
+include_directories("D:/Lib/TetGen-1.5.1")
+link_directories("D:/Lib/TetGen-1.5.1/build")
+add_executable(DA2 tetgen_io.cpp)
+target_link_libraries(DA2 tet)

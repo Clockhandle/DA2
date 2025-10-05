@@ -122,38 +122,75 @@ loader.load(
     }
 );
 
+function loadCutModel() {
+    const cutLoader = new PLYLoader();
+    
+    cutLoader.load(
+        "models/ply/monke_test/Monke_cut.ply",
+        (geometry) => {
+            geometry.computeVertexNormals();
+            
+            // Use a different material to show it's the cut version
+            const cutMaterial = new THREE.MeshStandardMaterial({
+                color: 0xff4444, // Red color to distinguish from original
+                wireframe: true,
+                side: THREE.DoubleSide
+            });
+            
+            cutMesh = new THREE.Mesh(geometry, cutMaterial);
+            cutMesh.position.set(0, 0, 0);
+            cutMesh.scale.set(2, 2, 2);
+            cutMesh.rotateX(-90);
+            
+            // Remove current mesh and add cut mesh
+            scene.remove(currentMesh);
+            currentMesh = cutMesh;
+            scene.add(currentMesh);
+            
+            console.log("Cut model loaded successfully!");
+        },
+        (progress) => {
+            console.log("Loading cut model:", (progress.loaded / progress.total) * 100 + "%");
+        },
+        (error) => {
+            console.error("Error loading cut PLY:", error);
+            alert("Failed to load cut model: " + error.message);
+        }
+    );
+}
 //-------------------------------------------------------------
 
 //--------------------------Button Events-------------------------------
 
 document.getElementById("cutModelBtn").addEventListener("click", async () => {
-	if(!originalMesh) return;
+    if(!originalMesh) return;
 
-	try {
-		const response = await fetch("http://localhost:3000/api/run-tetgen", {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json"
-			}
-		});
+    try {
+        const response = await fetch("http://localhost:3000/api/run-tetgen", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            }
+        });
 
-		const result = await response.json();
+        const result = await response.json();
 
-		if(result.success) {
-			console.log("Tetgen success");
-			console.log("Output: ", result.output);
-			alert(`Tetgen said: "${result.output}"`);
-		}
-		else {
-			console.error("Tetgen failedL ", result.error);
-			alert(`Tetgen failed: "${result.error}"`);
-		}
-	}
-	catch (error) {
-		console.log("Server communication error: ", error);
-		alert(`Server error: ${error.message}`);
-	}
-})
+        if(result.success) {
+            console.log("Tetgen success");
+            console.log("Output: ", result.output);
+            
+            // Load the generated cut model
+            loadCutModel();
+            
+        } else {
+            console.error("Tetgen failed: ", result.error);
+            alert(`Tetgen failed: "${result.error}"`);
+        }
+    } catch (error) {
+        console.log("Server communication error: ", error);
+        alert(`Server error: ${error.message}`);
+    }
+});
 
 document.getElementById("resetModelBtn").addEventListener("click", () => {
 	if(!originalMesh) return;

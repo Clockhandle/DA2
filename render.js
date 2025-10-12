@@ -82,7 +82,7 @@ let cutMesh = null;
 const loader = new PLYLoader();
 
 loader.load(
-    "models/ply/monke_test/Monke.ply",
+    "models/ply/cube_test/Cube.ply",
     (geometry) => {
         geometry.computeVertexNormals();
         
@@ -126,7 +126,7 @@ function loadCutModel() {
     const cutLoader = new PLYLoader();
     
     cutLoader.load(
-        "models/ply/monke_test/Monke_cut.ply",
+        "models/ply/cube_test/Cube_cut.ply",
         (geometry) => {
             geometry.computeVertexNormals();
             

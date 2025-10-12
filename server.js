@@ -23,7 +23,7 @@ app.use(express.json());
 app.post('/api/run-tetgen', (req, res) => {
     console.log('Received request to run DA2.exe');
     
-    const plyFilePath = "models/ply/monke_test/Monke.ply";
+    const plyFilePath = "models/ply/cube_test/Cube.ply";
 
     if (!fs.existsSync(plyFilePath)) {
         console.error("PLY file not found: ", plyFilePath);

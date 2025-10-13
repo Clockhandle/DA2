@@ -126,14 +126,14 @@ function loadCutModel() {
     const cutLoader = new PLYLoader();
     
     cutLoader.load(
-        "models/ply/cube_test/Cube_cut.ply",
+        "models/ply/cube_test/Cube_tetrahedra.ply", // CHANGED: Load the tetrahedra file
         (geometry) => {
             geometry.computeVertexNormals();
             
-            // Use a different material to show it's the cut version
+            // Use a different material to show the tetrahedra structure
             const cutMaterial = new THREE.MeshStandardMaterial({
                 color: 0xff4444, // Red color to distinguish from original
-                wireframe: true,
+                wireframe: true,  // Wireframe will show the tetrahedra edges
                 side: THREE.DoubleSide
             });
             
@@ -147,14 +147,14 @@ function loadCutModel() {
             currentMesh = cutMesh;
             scene.add(currentMesh);
             
-            console.log("Cut model loaded successfully!");
+            console.log("Tetrahedra model loaded successfully!");
         },
         (progress) => {
-            console.log("Loading cut model:", (progress.loaded / progress.total) * 100 + "%");
+            console.log("Loading tetrahedra model:", (progress.loaded / progress.total) * 100 + "%");
         },
         (error) => {
-            console.error("Error loading cut PLY:", error);
-            alert("Failed to load cut model: " + error.message);
+            console.error("Error loading tetrahedra PLY:", error);
+            alert("Failed to load tetrahedra model: " + error.message);
         }
     );
 }

@@ -10,7 +10,7 @@ const camera = new THREE.PerspectiveCamera(
   75, // Fov
   window.innerWidth / window.innerHeight,
   0.1,
-  1000
+  5000
 );
 
 const renderer = new THREE.WebGLRenderer();
@@ -39,44 +39,15 @@ scene.add(directionalLight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
+let flying = false;
+let flyingDirections = [];
+let flyingSpeed = 5.0; // Adjust for faster/slower movement
+
 // ------------------------Loaders-------------------------------
 
 let currentMesh = null;
 let originalMesh = null;
 let cutMesh = null;
-
-// const loader = new GLTFLoader();
-// let loadedModel;
-
-// loader.load(
-//     'models/gltf/monke_test/Monke.glb',
-//     (gltf) => {
-//         loadedModel = gltf.scene;
-//         scene.add(loadedModel);
-
-//         loadedModel.position.set(0, 0, 0);
-//         loadedModel.scale.set(2, 2, 2);
-
-//         let allVertices = [];
-
-//         loadedModel.traverse((child) => {
-//             if (child.isMesh && child.geometry) {
-//               const vertices = child.geometry.attributes.position.array;
-
-//               for(let i = 0; i < vertices.length; i += 3) {
-//                 allVertices.push(new THREE.Vector3(vertices[i], vertices[i + 1], vertices[i + 2]));
-//               }
-//             }
-//         });
-
-//     },
-//     (xhr) => {
-//         console.log((xhr.loaded / xhr.total) * 100 + '% loaded');
-//     },
-//     (error) => {
-//         console.error('An error happened', error);
-//     }
-// )
 
 
 const loader = new PLYLoader();
@@ -98,7 +69,7 @@ loader.load(
 		else {
             // Fallback to a nice color
             material = new THREE.MeshStandardMaterial({
-                color: 0xcc7a00, // Orange-brown monkey color
+                color: 0xcc7a00, // Orange-brown
 				wireframe: true,
                 side: THREE.DoubleSide
             });
@@ -107,7 +78,6 @@ loader.load(
         const mesh = new THREE.Mesh(geometry, material);
         mesh.position.set(0, 0, 0);
         mesh.scale.set(2, 2, 2);
-		mesh.rotateX(-90);
 
 		originalMesh = mesh;
 		currentMesh = mesh;
@@ -124,30 +94,71 @@ loader.load(
 
 function loadCutModel() {
     const cutLoader = new PLYLoader();
-    
+
     cutLoader.load(
-        "models/ply/cube_test/Cube_tetrahedra.ply", // CHANGED: Load the tetrahedra file
+        "models/ply/cube_test/Cube_tetrahedra.ply",
         (geometry) => {
             geometry.computeVertexNormals();
-            
-            // Use a different material to show the tetrahedra structure
-            const cutMaterial = new THREE.MeshStandardMaterial({
-                color: 0xff4444, // Red color to distinguish from original
-                wireframe: true,  // Wireframe will show the tetrahedra edges
-                side: THREE.DoubleSide
-            });
-            
-            cutMesh = new THREE.Mesh(geometry, cutMaterial);
-            cutMesh.position.set(0, 0, 0);
-            cutMesh.scale.set(2, 2, 2);
-            cutMesh.rotateX(-90);
-            
-            // Remove current mesh and add cut mesh
-            scene.remove(currentMesh);
-            currentMesh = cutMesh;
-            scene.add(currentMesh);
-            
-            console.log("Tetrahedra model loaded successfully!");
+
+            // Load the .tet file for tetrahedron indices
+            fetch("models/ply/cube_test/Cube_tetrahedra.tet")
+                .then(response => response.text())
+                .then(text => {
+                    // Remove previous cutMesh if exists
+                    if (cutMesh) scene.remove(cutMesh);
+
+                    const positions = geometry.attributes.position.array;
+                    const tetraGroup = new THREE.Group();
+
+                    const lines = text.trim().split('\n');
+                    const numTetrahedra = parseInt(lines[0]);
+                    for (let i = 1; i <= numTetrahedra; i++) {
+                        const [v1, v2, v3, v4] = lines[i].split(' ').map(Number);
+
+                        // Get the 4 vertices
+                        const verts = [
+                            positions[v1 * 3], positions[v1 * 3 + 1], positions[v1 * 3 + 2],
+                            positions[v2 * 3], positions[v2 * 3 + 1], positions[v2 * 3 + 2],
+                            positions[v3 * 3], positions[v3 * 3 + 1], positions[v3 * 3 + 2],
+                            positions[v4 * 3], positions[v4 * 3 + 1], positions[v4 * 3 + 2],
+                        ];
+
+                        // Each tetrahedron has 4 triangular faces
+                        const indices = [
+                            0, 1, 2,
+                            0, 1, 3,
+                            0, 2, 3,
+                            1, 2, 3
+                        ];
+
+                        const tetraGeometry = new THREE.BufferGeometry();
+                        tetraGeometry.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+                        tetraGeometry.setIndex(indices);
+                        tetraGeometry.computeVertexNormals();
+
+                        const tetraMesh = new THREE.Mesh(
+                            tetraGeometry,
+                            new THREE.MeshStandardMaterial({ color: 0xff4444, wireframe: true, side: THREE.DoubleSide })
+                        );
+                        // Do NOT randomize position here!
+                        tetraGroup.add(tetraMesh);
+                    }
+
+                    tetraGroup.scale.set(2, 2, 2);
+                    tetraGroup.rotateX(-Math.PI / 2);
+
+                    cutMesh = tetraGroup;
+                    scene.add(cutMesh);
+                    currentMesh = cutMesh;
+
+                    // Remove the original cube from the scene
+                    if (originalMesh) {
+                        scene.remove(originalMesh); // This removes the original cube from the scene
+                        // or: originalMesh.visible = false; // This just hides it, but keeps it in the scene
+                    }
+
+                    console.log("Tetrahedra model loaded in original positions!");
+                });
         },
         (progress) => {
             console.log("Loading tetrahedra model:", (progress.loaded / progress.total) * 100 + "%");
@@ -158,6 +169,13 @@ function loadCutModel() {
         }
     );
 }
+
+const explosionCenter = new THREE.Vector3(0, 0, 0); // You can adjust this
+const sphereGeometry = new THREE.SphereGeometry(5, 32, 32);
+const sphereMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+const explosionSphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+explosionSphere.position.copy(explosionCenter);
+scene.add(explosionSphere);
 //-------------------------------------------------------------
 
 //--------------------------Button Events-------------------------------
@@ -193,13 +211,78 @@ document.getElementById("cutModelBtn").addEventListener("click", async () => {
 });
 
 document.getElementById("resetModelBtn").addEventListener("click", () => {
-	if(!originalMesh) return;
-	scene.remove(currentMesh);
-	currentMesh = originalMesh;
-	scene.add(currentMesh);
+    // Stop flying animation and clear directions
+    flying = false;
+    flyingDirections = [];
 
-	console.log("Reset to original model");
-})
+    // Remove cut mesh if present
+    if (cutMesh) {
+        scene.remove(cutMesh);
+        cutMesh = null;
+    }
+
+    // Show the original mesh
+    if (originalMesh && !scene.children.includes(originalMesh)) {
+        scene.add(originalMesh);
+    }
+    currentMesh = originalMesh;
+
+    console.log("Reset to original model");
+});
+
+document.getElementById("scrambleModelBtn").addEventListener("click", () => {
+    if (cutMesh) {
+        scrambleAllTetrahedraPositions();
+    } else {
+        scrambleModelPosition(currentMesh || originalMesh);
+    }
+});
+
+function scrambleModelPosition(mesh) {
+    if (!mesh) return;
+    mesh.position.set(
+        (Math.random() - 0.5) * 10,
+        (Math.random() - 0.5) * 10,
+        (Math.random() - 0.5) * 10
+    );
+}
+
+function scrambleAllTetrahedraPositions() {
+    if (!cutMesh) return;
+    const count = cutMesh.children.length;
+    const radius = 150; // Increased radius for more separation
+    cutMesh.children.forEach((tetra, i) => {
+        const angle = (i / count) * Math.PI * 2;
+        tetra.position.set(
+            Math.cos(angle) * radius,
+            Math.sin(angle) * radius,
+            0
+        );
+    });
+}
+
+document.getElementById("randomizeFlyingBtn").addEventListener("click", () => {
+    if (!cutMesh) return;
+    flying = true;
+    flyingDirections = [];
+    cutMesh.children.forEach((tetra) => {
+        // Calculate the center of the tetrahedron geometry
+        const posAttr = tetra.geometry.getAttribute('position');
+        let center = new THREE.Vector3(0, 0, 0);
+        for (let i = 0; i < posAttr.count; i++) {
+            center.add(new THREE.Vector3(
+                posAttr.getX(i),
+                posAttr.getY(i),
+                posAttr.getZ(i)
+            ));
+        }
+        center.multiplyScalar(1 / posAttr.count);
+
+        // Direction from explosion center to tetrahedron center
+        const dir = center.clone().sub(explosionCenter).normalize();
+        flyingDirections.push(dir);
+    });
+});
 
 //----------------------------------------------------------------------
 camera.position.set(0, 3, 0);
@@ -210,11 +293,21 @@ controls.dampingFactor = 0.25;
 controls.enableZoom = true;
 
 function animate() {
-  requestAnimationFrame(animate);
+    requestAnimationFrame(animate);
 
-  controls.update();
+    controls.update();
 
-  renderer.render(scene, camera);
+    // Flying animation
+    if (flying && cutMesh && flyingDirections.length === cutMesh.children.length) {
+        cutMesh.children.forEach((tetra, i) => {
+            tetra.position.add(flyingDirections[i].clone().multiplyScalar(flyingSpeed));
+        });
+    }
+
+    renderer.render(scene, camera);
 }
 
 animate();
+
+
+

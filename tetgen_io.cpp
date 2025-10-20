@@ -26,7 +26,7 @@ int main(int argc, char* argv[]) {
     std::cout << "Input mesh: " << in.numberofpoints << " vertices, " << in.numberoffacets << " faces" << std::endl;
 
     tetgenbehavior b;
-    b.parse_commandline(const_cast<char*>("pqa200")); // Example options: -p (PLC), -q (quality), -a (max volume)
+    b.parse_commandline(const_cast<char*>("pqa500")); // Example options: -p (PLC), -q (quality), -a (max volume)
     tetrahedralize(&b, &in, &out);
     
     std::cout << "Output mesh: " << out.numberofpoints << " vertices, " << out.numberoftetrahedra << " tetrahedra" << std::endl;
@@ -73,6 +73,24 @@ int main(int argc, char* argv[]) {
     } else {
         std::cerr << "Failed to create output file: " << outputFile << std::endl;
         return 1;
+    }
+
+    // Write tetrahedron indices to a .tet file
+    std::string tetFileName = "models/ply/cube_test/Cube_tetrahedra.tet";
+    std::ofstream tetFile(tetFileName);
+    if (tetFile.is_open()) {
+        tetFile << out.numberoftetrahedra << std::endl;
+        for (int i = 0; i < out.numberoftetrahedra; i++) {
+            int v1 = out.tetrahedronlist[i*4 + 0];
+            int v2 = out.tetrahedronlist[i*4 + 1];
+            int v3 = out.tetrahedronlist[i*4 + 2];
+            int v4 = out.tetrahedronlist[i*4 + 3];
+            tetFile << v1 << " " << v2 << " " << v3 << " " << v4 << std::endl;
+        }
+        tetFile.close();
+        std::cout << "Saved tetrahedron indices to: " << tetFileName << std::endl;
+    } else {
+        std::cerr << "Failed to create .tet file: " << tetFileName << std::endl;
     }
 
     std::cout << "Tetgen processing complete!" << std::endl;

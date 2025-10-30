@@ -26,7 +26,7 @@ int main(int argc, char* argv[]) {
     std::cout << "Input mesh: " << in.numberofpoints << " vertices, " << in.numberoffacets << " faces" << std::endl;
 
     tetgenbehavior b;
-    b.parse_commandline(const_cast<char*>("pqa500")); // Example options: -p (PLC), -q (quality), -a (max volume)
+    b.parse_commandline(const_cast<char*>("pqa")); // Example options: -p (PLC), -q (quality), -a (max volume)
     tetrahedralize(&b, &in, &out);
     
     std::cout << "Output mesh: " << out.numberofpoints << " vertices, " << out.numberoftetrahedra << " tetrahedra" << std::endl;

@@ -20,8 +20,18 @@
         <button id="resetModelBtn">Reset</button>
         <button id="scrambleModelBtn">Scramble Model Position</button>
         <button id="randomizeFlyingBtn">Flying Fragments</button>
+        <button id="addMassBtn">Add Mass (Activate Physics)</button>
     </div>
     
+    <script>
+        // Set a larger memory size for the Ammo.js module (e.g., 256MB)
+        // 268435456 is 256 * 1024 * 1024 (256MB)
+        Module = {
+            TOTAL_MEMORY: 268435456 
+        };
+    </script>
+    
+    <script src="./node_modules/ammo.js/ammo.js"></script>
     <script type="module" src="render.js"></script>
 </body>
 </html>

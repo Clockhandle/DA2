@@ -3,11 +3,8 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { PLYLoader } from "three/examples/jsm/loaders/PLYLoader.js"
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
-//TODO: Ammo physic engine
-//      Cut Meshes to look more natural.
-
 // =================================================================
-// == 3D SCENE SETUP (Scene, Camera, Renderer, Light)
+// SCENE SETUP
 // =================================================================
 
 const scene = new THREE.Scene();
@@ -19,7 +16,7 @@ const camera = new THREE.PerspectiveCamera(
   0.1,
   5000
 );
-camera.position.set(0, 3, 0); // Moved from bottom
+camera.position.set(0, 3, 0);
 
 const renderer = new THREE.WebGLRenderer();
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -29,107 +26,87 @@ renderer.domElement.style.left = "0";
 renderer.domElement.style.zIndex = "0";
 document.body.appendChild(renderer.domElement);
 
-const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-directionalLight.position.set(10, 10, 5);
-directionalLight.castShadow = true;
-directionalLight.shadow.mapSize.width = 2048;
-directionalLight.shadow.mapSize.height = 2048;
-directionalLight.shadow.camera.near = 0.5;
-directionalLight.shadow.camera.far = 50;
-directionalLight.shadow.camera.left = -10;
-directionalLight.shadow.camera.right = 10;
-directionalLight.shadow.camera.top = 10;
-directionalLight.shadow.camera.bottom = -10;
-scene.add(directionalLight);
+// --- GPU CHECK ---
+const gl = renderer.getContext();
+const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+if (debugInfo) {
+    const vendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
+    const rendererName = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+    console.log("GPU Vendor:", vendor);
+    console.log("GPU Renderer:", rendererName);
+} else {
+    console.log("WebGL Active, but debug info unavailable.");
+}
+// -----------------
 
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
+scene.add(ambientLight);
 
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true; // Smooth camera movement
+controls.enableDamping = true;
 controls.dampingFactor = 0.25;
 controls.enableZoom = true;
 
 // =================================================================
-// == GLOBAL STATE & HELPER VARIABLES
+// GLOBAL VARIABLES
 // =================================================================
 
-// --- Mesh Management ---
 let currentMesh = null;
 let originalMesh = null;
 let cutMesh = null;
 const loader = new PLYLoader();
 
-// --- Physics ---
 let physicsWorld = null;
 let rigidBodies = [];
 let ammoReady = false;
 const tempAmmoTransform = new Ammo.btTransform();
 const tempThreeMatrix = new THREE.Matrix4();
 
-// --- Animation ---
 let flying = false;
 let flyingDirections = [];
-let flyingSpeed = 5.0; // Adjust for faster/slower movement
-const explosionCenter = new THREE.Vector3(0, 0, 0); // You can adjust this
-
-// (Debug sphere for explosion center)
-const sphereGeometry = new THREE.SphereGeometry(5, 32, 32);
-const sphereMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
-const explosionSphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
-explosionSphere.position.copy(explosionCenter);
-scene.add(explosionSphere);
-
+let flyingSpeed = 5.0;
+const explosionCenter = new THREE.Vector3(0, 0, 0);
 
 // =================================================================
-// == PHYSICS INITIALIZATION
+// PHYSICS INITIALIZATION
 // =================================================================
 
 function initPhysics() {
     if (typeof Ammo === 'undefined') {
-        console.log("Waiting for Ammo.js to load...");
-        setTimeout(initPhysics, 100); // Check again in 100ms
+        setTimeout(initPhysics, 100);
         return;
     }
 
-    console.log("Ammo.js loaded, initializing physics world.");
     const collisionConfiguration = new Ammo.btDefaultCollisionConfiguration();
     const dispatcher = new Ammo.btCollisionDispatcher(collisionConfiguration);
     const broadphase = new Ammo.btDbvtBroadphase();
     const solver = new Ammo.btSequentialImpulseConstraintSolver();
     physicsWorld = new Ammo.btDiscreteDynamicsWorld(dispatcher, broadphase, solver, collisionConfiguration);
-    physicsWorld.setGravity(new Ammo.btVector3(0, -9.8, 0));
+    physicsWorld.setGravity(new Ammo.btVector3(0, -30, 0));
     ammoReady = true;
 }
 
 initPhysics();
 
 // =================================================================
-// == PHYSICS HELPER FUNCTION
+// PHYSICS HELPERS
 // =================================================================
 
-// Helper to add physics body (FIXED VERSION 3.0)
-// This version calculates the geometry's center to counteract
-// Ammo.js's automatic center-of-mass shift.
 function addPhysicsBody(mesh, mass) {
-    // Force the mesh to update its world matrix
     mesh.updateWorldMatrix(true, false);
     const worldMatrix = mesh.matrixWorld;
     
-    // Decompose the world matrix
     const transform = new Ammo.btTransform();
     const tempQuat = new THREE.Quaternion();
     const tempPos = new THREE.Vector3();
     const tempScale = new THREE.Vector3();
     worldMatrix.decompose(tempPos, tempQuat, tempScale);
     
-    // Create the collision shape
     const shape = new Ammo.btConvexHullShape();
     const geometry = mesh.geometry;
     const positionAttribute = geometry.getAttribute('position');
     const vertices = positionAttribute.array;
 
-    // Add vertices
     for (let i = 0; i < positionAttribute.count; i++) {
         shape.addPoint(new Ammo.btVector3(
             vertices[i * 3], 
@@ -138,38 +115,30 @@ function addPhysicsBody(mesh, mass) {
         ), true);
     }
 
-    // --- *** THE DEFINITIVE FIX *** ---
-    // Scale the PHYSICS HULL down by 1% to create a tiny, invisible
-    // gap between pieces. This guarantees no initial overlap/explosion.
-    // The VISUAL mesh (tempScale) remains full size.
-    const physicsScale = 0.99; // 99% of the original size
+    const physicsScale = 0.99;
     shape.setLocalScaling(new Ammo.btVector3(
         tempScale.x * physicsScale, 
         tempScale.y * physicsScale, 
         tempScale.z * physicsScale
     ));
-    // --- *** END FIX *** ---
     
-    // Set margin to zero (still good practice)
-    shape.setMargin(0);
+    shape.setMargin(0.01); // Small margin helps pointy collisions
 
     transform.setOrigin(new Ammo.btVector3(tempPos.x, tempPos.y, tempPos.z));
     transform.setRotation(new Ammo.btQuaternion(tempQuat.x, tempQuat.y, tempQuat.z, tempQuat.w));
     
     const motionState = new Ammo.btDefaultMotionState(transform);
-
     const localInertia = new Ammo.btVector3(0, 0, 0);
     if (mass > 0) shape.calculateLocalInertia(mass, localInertia);
 
     const rbInfo = new Ammo.btRigidBodyConstructionInfo(mass, motionState, shape, localInertia);
     const body = new Ammo.btRigidBody(rbInfo);
 
-    body.setMotionState(motionState); 
-
     if (mass > 0) {
-        // Start dynamic bodies in a "sleeping" state
-        // 5 = ISLAND_SLEEPING
-        body.setActivationState(5);
+        body.setActivationState(1); // 1 = ACTIVE_TAG (Wake up immediately)
+        // Enable Continuous Collision Detection (CCD) for fast/pointy objects
+        body.setCcdMotionThreshold(1e-7);
+        body.setCcdSweptSphereRadius(0.2);
     }
 
     physicsWorld.addRigidBody(body);
@@ -177,12 +146,10 @@ function addPhysicsBody(mesh, mass) {
     if (mass > 0) rigidBodies.push(mesh);
 }
 
-
 // =================================================================
-// == MESH LOADING
+// MESH LOADING
 // =================================================================
 
-// --- Load the initial cube ---
 loader.load(
     "models/ply/cube_test/Cube.ply",
     (geometry) => {
@@ -212,23 +179,67 @@ loader.load(
 
         scene.add(mesh);
 
-        // Add static physics body when Ammo is ready
         const checkAmmo = setInterval(() => {
             if (ammoReady) {
-                addPhysicsBody(mesh, 0); // mass = 0 for static
+                addPhysicsBody(mesh, 0);
                 clearInterval(checkAmmo);
             }
         }, 50);
-    },
-    (progress) => {
-        console.log("Loading progress:", (progress.loaded / progress.total) * 100 + "%");
-    },
-    (error) => {
-        console.error("Error loading PLY: ", error);
     }
 );
 
-// --- Load the cut-up tetrahedra model (called by button) ---
+// =================================================================
+// ENVIRONMENT SETUP
+// =================================================================
+
+function createGroundPlane() {
+    const groundGeometry = new THREE.PlaneGeometry(1000, 1000);
+    const groundMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0x404040, 
+        side: THREE.DoubleSide 
+    });
+    
+    const groundMesh = new THREE.Mesh(groundGeometry, groundMaterial);
+    groundMesh.rotation.x = -Math.PI / 2;
+    groundMesh.position.y = -200;
+    
+    scene.add(groundMesh);
+    
+    const checkAmmo = setInterval(() => {
+        if (ammoReady) {
+            const groundShape = new Ammo.btBoxShape(new Ammo.btVector3(500, 1.0, 500));
+            const transform = new Ammo.btTransform();
+            transform.setIdentity();
+            transform.setOrigin(new Ammo.btVector3(0, -201, 0));
+            const motionState = new Ammo.btDefaultMotionState(transform);
+            const rbInfo = new Ammo.btRigidBodyConstructionInfo(0, motionState, groundShape, new Ammo.btVector3(0, 0, 0));
+            const body = new Ammo.btRigidBody(rbInfo);
+            body.setRestitution(0.5);
+            body.setFriction(0.8);
+            physicsWorld.addRigidBody(body);
+            groundMesh.userData.physicsBody = body;
+            clearInterval(checkAmmo);
+        }
+    }, 50);
+}
+
+setTimeout(() => {
+    if (ammoReady) {
+        createGroundPlane();
+    } else {
+        const waitForAmmo = setInterval(() => {
+            if (ammoReady) {
+                createGroundPlane();
+                clearInterval(waitForAmmo);
+            }
+        }, 100);
+    }
+}, 500);
+
+// =================================================================
+// TETGEN MODEL LOADING
+// =================================================================
+
 function loadCutModel() {
     const cutLoader = new PLYLoader();
 
@@ -237,14 +248,10 @@ function loadCutModel() {
         (geometry) => {
             geometry.computeVertexNormals();
 
-            // Load the .tet file for tetrahedron indices
             fetch("models/ply/cube_test/Cube_tetrahedra.tet")
                 .then(response => response.text())
                 .then(text => {
-                    
-                    // --- Cleanup previous model ---
                     if (cutMesh) {
-                        // Loop through all old tetrahedra and remove their physics bodies
                         cutMesh.children.forEach(tetraMesh => {
                             if (tetraMesh.userData.physicsBody) {
                                 physicsWorld.removeRigidBody(tetraMesh.userData.physicsBody);
@@ -256,14 +263,10 @@ function loadCutModel() {
                     if (originalMesh) {
                         if (originalMesh.userData.physicsBody) {
                             physicsWorld.removeRigidBody(originalMesh.userData.physicsBody);
-                            originalMesh.userData.physicsBody = null; // Clear the reference
+                            originalMesh.userData.physicsBody = null;
                         }
                         scene.remove(originalMesh);
                     }
-                    // --- End Cleanup ---
-
-
-                    // --- Create new model ---
                     const positions = geometry.attributes.position.array;
                     const tetraGroup = new THREE.Group();
 
@@ -294,36 +297,25 @@ function loadCutModel() {
                     }
 
                     tetraGroup.scale.set(2, 2, 2);
-                    tetraGroup.rotateX(-Math.PI / 2); // <--- Transformation is applied here
+                    tetraGroup.rotateX(-Math.PI / 2);
 
                     cutMesh = tetraGroup;
                     scene.add(cutMesh);
                     currentMesh = cutMesh;
 
-                    // --- Add physics bodies for each new piece ---
                     if (ammoReady) {
                         cutMesh.children.forEach(tetraMesh => {
                             tetraMesh.updateWorldMatrix(true, false); 
-                            addPhysicsBody(tetraMesh, 0); // <-- Set back to 1 for dynamic
+                            addPhysicsBody(tetraMesh, 1.0);
                         });
                     }
-
-                    console.log("Tetrahedra model loaded in original positions!");
                 });
-        },
-        (progress) => {
-            console.log("Loading tetrahedra model:", (progress.loaded / progress.total) * 100 + "%");
-        },
-        (error) => {
-            console.error("Error loading tetrahedra PLY:", error);
-            alert("Failed to load tetrahedra model: " + error.message);
         }
     );
 }
 
-
 // =================================================================
-// == UI BUTTON EVENT LISTENERS
+// UI EVENT HANDLERS
 // =================================================================
 
 document.getElementById("cutModelBtn").addEventListener("click", async () => {
@@ -340,27 +332,16 @@ document.getElementById("cutModelBtn").addEventListener("click", async () => {
         const result = await response.json();
 
         if(result.success) {
-            console.log("Tetgen success");
-            console.log("Output: ", result.output);
-            
-            // Load the generated cut model
             loadCutModel();
-            
         } else {
-            console.error("Tetgen failed: ", result.error);
             alert(`Tetgen failed: "${result.error}"`);
         }
     } catch (error) {
-        console.log("Server communication error: ", error);
         alert(`Server error: ${error.message}`);
     }
 });
 
 document.getElementById("resetModelBtn").addEventListener("click", () => {
-    // NOTE: This will require a page reload to reset the physics,
-    // or a much more complex reset function.
-    
-    // Stop flying animation and clear directions
     flying = false;
     flyingDirections = [];
 
@@ -378,19 +359,13 @@ document.getElementById("resetModelBtn").addEventListener("click", () => {
         rigidBodies = [];
     }
 
-    // Show the original mesh (if it hasn't been added back)
     if (originalMesh && !scene.children.includes(originalMesh)) {
         scene.add(originalMesh);
-        // Add its physics body back
         if (ammoReady) {
              addPhysicsBody(originalMesh, 0);
         }
     }
     currentMesh = originalMesh;
-
-    console.log("Reset to original model");
-    // A simple page reload might be easier
-    // window.location.reload(); 
 });
 
 document.getElementById("scrambleModelBtn").addEventListener("click", () => {
@@ -406,10 +381,9 @@ document.getElementById("randomizeFlyingBtn").addEventListener("click", () => {
     flying = true;
     flyingDirections = [];
     cutMesh.children.forEach((tetra) => {
-        // Calculate the center of the tetrahedron geometry
         const body = tetra.userData.physicsBody;
         if (body) {
-            body.activate(); // This "wakes up" the body
+            body.activate();
         }
         const posAttr = tetra.geometry.getAttribute('position');
         let center = new THREE.Vector3(0, 0, 0);
@@ -421,57 +395,17 @@ document.getElementById("randomizeFlyingBtn").addEventListener("click", () => {
             ));
         }
         center.multiplyScalar(1 / posAttr.count);
-
-        // Direction from explosion center to tetrahedron center
         const dir = center.clone().sub(explosionCenter).normalize();
         flyingDirections.push(dir);
     });
 });
 
-document.getElementById("addMassBtn").addEventListener("click", () => {
-    if (!cutMesh) {
-        console.log("No cut model to add mass to.");
-        return;
-    }
-    
-    console.log("Adding mass and activating physics...");
-
-    const newMass = 1.0;
-    const localInertia = new Ammo.btVector3(0, 0, 0);
-
-    cutMesh.children.forEach(tetraMesh => {
-        const body = tetraMesh.userData.physicsBody;
-        if (body) {
-            
-            // 1. Get the shape and calculate inertia
-            const shape = body.getCollisionShape();
-            shape.calculateLocalInertia(newMass, localInertia);
-            
-            // 2. Set the mass. Ammo.js will now calculate
-            //    the CoM and apply its internal shift.
-            body.setMassProps(newMass, localInertia);
-            
-            // 3. Update and wake up
-            body.updateInertiaTensor();
-            body.activate();
-
-            // 4. Add to update list
-            if (!rigidBodies.includes(tetraMesh)) {
-                rigidBodies.push(tetraMesh);
-            }
-        }
-    });
-
-    console.log("All tetrahedra are now dynamic.");
-});
-
 // =================================================================
-// == UI HELPER FUNCTIONS
+// HELPER FUNCTIONS
 // =================================================================
 
 function scrambleModelPosition(mesh) {
     if (!mesh) return;
-    // Note: This won't work on a static physics body
     mesh.position.set(
         (Math.random() - 0.5) * 10,
         (Math.random() - 0.5) * 10,
@@ -481,10 +415,8 @@ function scrambleModelPosition(mesh) {
 
 function scrambleAllTetrahedraPositions() {
     if (!cutMesh) return;
-    // This will fight with the physics simulation.
-    // A better way would be to apply a physics impulse.
     const count = cutMesh.children.length;
-    const radius = 150; // Increased radius for more separation
+    const radius = 150;
     cutMesh.children.forEach((tetra, i) => {
         const angle = (i / count) * Math.PI * 2;
         tetra.position.set(
@@ -495,60 +427,56 @@ function scrambleAllTetrahedraPositions() {
     });
 }
 
-
 // =================================================================
-// == MAIN ANIMATION LOOP
+// ANIMATION LOOP
 // =================================================================
 
 function animate() {
     requestAnimationFrame(animate);
 
-    const deltaTime = 1 / 60; // Assuming 60 FPS
+    const deltaTime = 1 / 60;
 
-    // --- Physics Update ---
     if (physicsWorld && ammoReady) {
         physicsWorld.stepSimulation(deltaTime, 10);
 
-        // Update visual positions of dynamic bodies
         rigidBodies.forEach(mesh => {
             const body = mesh.userData.physicsBody;
             const ms = body.getMotionState();
             
             if (ms) {
-                ms.getWorldTransform(tempAmmoTransform); // Get world transform from physics
+                ms.getWorldTransform(tempAmmoTransform);
                 
                 const p = tempAmmoTransform.getOrigin();
                 const q = tempAmmoTransform.getRotation();
 
-                // Get the parent's inverse world matrix
                 mesh.parent.updateWorldMatrix(true, false);
                 const parentInverse = mesh.parent.matrixWorld.clone().invert();
 
-                // Create a THREE.Matrix4 from the physics (world) transform
                 tempThreeMatrix.compose(
                     new THREE.Vector3(p.x(), p.y(), p.z()),
                     new THREE.Quaternion(q.x(), q.y(), q.z(), q.w()),
-                    mesh.scale // Preserve the mesh's local scale
+                    mesh.scale
                 );
                 
-                // Convert the world transform to a local transform
                 tempThreeMatrix.premultiply(parentInverse);
                 
-                // Decompose the local matrix into the mesh's properties
-                tempThreeMatrix.decompose(mesh.position, mesh.quaternion, mesh.scale);
+                const tempPos = new THREE.Vector3();
+                const tempQuat = new THREE.Quaternion();
+                const tempScale = new THREE.Vector3();
+                tempThreeMatrix.decompose(tempPos, tempQuat, tempScale);
+                
+                mesh.position.copy(tempPos);
+                mesh.quaternion.copy(tempQuat);
             }
         });
     }
 
-    // --- Animation Update ---
     if (flying && cutMesh && flyingDirections.length === cutMesh.children.length) {
-        // This will fight with physics. Should disable physics for flying.
         cutMesh.children.forEach((tetra, i) => {
             tetra.position.add(flyingDirections[i].clone().multiplyScalar(flyingSpeed * deltaTime));
         });
     }
 
-    // --- Render ---
     controls.update();
     renderer.render(scene, camera);
 }

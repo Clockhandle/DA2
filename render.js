@@ -16,7 +16,10 @@ const camera = new THREE.PerspectiveCamera(
   0.1,
   5000
 );
-camera.position.set(0, 3, 0);
+
+camera.position.set(-374, 794, 302); // Rounded from your logged position
+camera.rotation.set(-0.31, 0.01, 0.00); // Rounded from your logged rotation
+
 
 const renderer = new THREE.WebGLRenderer();
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -64,10 +67,10 @@ let ammoReady = false;
 const tempAmmoTransform = new Ammo.btTransform();
 const tempThreeMatrix = new THREE.Matrix4();
 
-let flying = false;
-let flyingDirections = [];
-let flyingSpeed = 5.0;
-const explosionCenter = new THREE.Vector3(0, 0, 0);
+let explosionCenter = new THREE.Vector3(0, 0, 0); // Center point of explosion
+let explosionForce = 750; // Force magnitude
+let explosionRadius = 200; // Max distance for force effect
+let explosionIndicator = null; // Visual marker for bomb position
 
 // =================================================================
 // PHYSICS INITIALIZATION
@@ -84,7 +87,7 @@ function initPhysics() {
     const broadphase = new Ammo.btDbvtBroadphase();
     const solver = new Ammo.btSequentialImpulseConstraintSolver();
     physicsWorld = new Ammo.btDiscreteDynamicsWorld(dispatcher, broadphase, solver, collisionConfiguration);
-    physicsWorld.setGravity(new Ammo.btVector3(0, -30, 0));
+    physicsWorld.setGravity(new Ammo.btVector3(0, -50, 0));
     ammoReady = true;
 }
 
@@ -308,7 +311,7 @@ function loadCutModel() {
                                 if (ammoReady) {
                                     tetraGroup.children.forEach(mesh => {
                                         mesh.updateWorldMatrix(true, false);
-                                        addPhysicsBody(mesh, 1.0);
+                                        addPhysicsBody(mesh, 0.0);
                                     });
                                 }
                                 
@@ -349,9 +352,8 @@ document.getElementById("cutModelBtn").addEventListener("click", async () => {
 });
 
 document.getElementById("resetModelBtn").addEventListener("click", async () => {
-    flying = false;
-    flyingDirections = [];
 
+    removeExplosionIndicator();
     // Remove cut mesh if present
     if (cutMesh) {
         cutMesh.children.forEach(tetraMesh => {
@@ -401,28 +403,29 @@ document.getElementById("scrambleModelBtn").addEventListener("click", () => {
     }
 });
 
-document.getElementById("randomizeFlyingBtn").addEventListener("click", () => {
-    if (!cutMesh) return;
-    flying = true;
-    flyingDirections = [];
-    cutMesh.children.forEach((tetra) => {
-        const body = tetra.userData.physicsBody;
-        if (body) {
-            body.activate();
-        }
-        const posAttr = tetra.geometry.getAttribute('position');
-        let center = new THREE.Vector3(0, 0, 0);
-        for (let i = 0; i < posAttr.count; i++) {
-            center.add(new THREE.Vector3(
-                posAttr.getX(i),
-                posAttr.getY(i),
-                posAttr.getZ(i)
-            ));
-        }
-        center.multiplyScalar(1 / posAttr.count);
-        const dir = center.clone().sub(explosionCenter).normalize();
-        flyingDirections.push(dir);
-    });
+document.getElementById("activateExplosionBtn").addEventListener("click", () => {
+    if (!cutMesh) {
+        console.log("Cut the model first!");
+        return;
+    }
+    
+    explosionCenter.set(0, 0, 0);
+    
+    createExplosionIndicator();
+    
+    // Apply explosion after a short delay (simulating fuse/detonation)
+    setTimeout(() => {
+        applyExplosionForce();
+    }, 500); // 0.5 second delay to see the indicator
+});
+
+document.addEventListener("keydown", (event) => {
+    if (event.key === "p" || event.key === "P") {
+        console.log("Camera Position:", camera.position);
+        console.log(`x: ${camera.position.x}, y: ${camera.position.y}, z: ${camera.position.z}`);
+        console.log("Camera Rotation:", camera.rotation);
+        console.log("Camera Target (controls):", controls.target);
+    }
 });
 
 // =================================================================
@@ -451,6 +454,136 @@ function scrambleAllTetrahedraPositions() {
         );
     });
 }
+
+function createExplosionIndicator() {
+    // Remove old indicator if exists
+    if (explosionIndicator) {
+        scene.remove(explosionIndicator);
+    }
+    
+    // Create a red sphere to show bomb location
+    const geometry = new THREE.SphereGeometry(5, 16, 16);
+    const material = new THREE.MeshBasicMaterial({ 
+        color: 0xff0000, 
+        transparent: true,
+        opacity: 0.7,
+        wireframe: true
+    });
+    
+    explosionIndicator = new THREE.Mesh(geometry, material);
+    explosionIndicator.position.copy(explosionCenter);
+    scene.add(explosionIndicator);
+    
+    console.log(`Explosion center set at: (${explosionCenter.x}, ${explosionCenter.y}, ${explosionCenter.z})`);
+}
+
+function removeExplosionIndicator() {
+    if (explosionIndicator) {
+        scene.remove(explosionIndicator);
+        explosionIndicator = null;
+    }
+}
+
+function applyExplosionForce() {
+    if (!cutMesh || !ammoReady) {
+        console.log("No cut mesh or physics not ready");
+        return;
+    }
+    
+    console.log("Starting explosion sequence...");
+    
+    // First, make all pieces dynamic (activate gravity)
+    cutMesh.children.forEach(mesh => {
+        const existingBody = mesh.userData.physicsBody;
+        
+        if (existingBody) {
+            // Remove the old static body
+            physicsWorld.removeRigidBody(existingBody);
+            
+            // Remove from rigidBodies array if present
+            const index = rigidBodies.indexOf(mesh);
+            if (index > -1) {
+                rigidBodies.splice(index, 1);
+            }
+            
+            // Clear the reference
+            mesh.userData.physicsBody = null;
+        }
+        
+        // Create new dynamic body with mass = 1.0
+        mesh.updateWorldMatrix(true, false);
+        addPhysicsBody(mesh, 1.0);
+    });
+    
+    console.log(`Converted ${cutMesh.children.length} pieces to dynamic bodies`);
+    
+    setTimeout(() => {
+        cutMesh.children.forEach(mesh => {
+            const body = mesh.userData.physicsBody;
+            if (!body) {
+                console.warn("Mesh missing physics body!");
+                return;
+            }
+            
+            mesh.updateWorldMatrix(true, false);
+            const meshPos = new THREE.Vector3();
+            meshPos.setFromMatrixPosition(mesh.matrixWorld);
+            
+            const direction = new THREE.Vector3().subVectors(meshPos, explosionCenter);
+            const distance = direction.length();
+            
+            // Skip if too far away
+            if (distance > explosionRadius) {
+                console.log(`Piece too far: ${distance} > ${explosionRadius}`);
+                return;
+            }
+            
+            // Avoid division by zero if piece is exactly at center
+            if (distance < 0.1) {
+                direction.set(
+                    Math.random() - 0.5,
+                    Math.random() - 0.5,
+                    Math.random() - 0.5
+                );
+            }
+            
+            // Normalize direction
+            direction.normalize();
+            
+            // Calculate force based on distance (closer = stronger)
+            const forceMagnitude = explosionForce * (1 - distance / explosionRadius);
+            
+            console.log(`Applying force: ${forceMagnitude} at distance: ${distance}`);
+            
+            // Apply impulse to the rigid body
+            const impulse = new Ammo.btVector3(
+                direction.x * forceMagnitude,
+                direction.y * forceMagnitude - 300,
+                direction.z * forceMagnitude
+            );
+            
+            body.activate(); // Wake up the body
+            body.applyCentralImpulse(impulse);
+            
+            // Also add some random spin for more realistic explosion
+            const torque = new Ammo.btVector3(
+                (Math.random() - 0.5) * forceMagnitude * 0.5,
+                (Math.random() - 0.5) * forceMagnitude * 0.5,
+                (Math.random() - 0.5) * forceMagnitude * 0.5
+            );
+            body.applyTorqueImpulse(torque);
+            
+            Ammo.destroy(impulse);
+            Ammo.destroy(torque);
+        });
+        
+        console.log(`Explosion applied! Force: ${explosionForce}, Radius: ${explosionRadius}`);
+    }, 50); // Small delay to ensure physics bodies are ready
+    
+    // Remove the indicator after explosion
+    setTimeout(removeExplosionIndicator, 200);
+}
+
 
 // =================================================================
 // ANIMATION LOOP
@@ -493,12 +626,6 @@ function animate() {
                 mesh.position.copy(tempPos);
                 mesh.quaternion.copy(tempQuat);
             }
-        });
-    }
-
-    if (flying && cutMesh && flyingDirections.length === cutMesh.children.length) {
-        cutMesh.children.forEach((tetra, i) => {
-            tetra.position.add(flyingDirections[i].clone().multiplyScalar(flyingSpeed * deltaTime));
         });
     }
 

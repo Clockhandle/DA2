@@ -1,6 +1,7 @@
 import express from 'express';
 import { execFile } from 'child_process';
 import fs from 'fs';
+import path from 'path';
 
 const app = express();
 
@@ -71,6 +72,54 @@ app.post('/api/run-tetgen', (req, res) => {
 
 app.get('/api/test', (req, res) => {
     res.json({ message: 'Server is working!' });
+});
+
+app.post('/api/cleanup-tetgen', (req, res) => {
+    console.log('Received request to cleanup tetgen files');
+    
+    const directory = 'models/ply/cube_test/';
+    
+    if (!fs.existsSync(directory)) {
+        res.status(404).json({ 
+            success: false, 
+            error: 'Directory not found' 
+        });
+        return;
+    }
+
+    try {
+        const files = fs.readdirSync(directory);
+        let deletedCount = 0;
+        
+        // Delete all files that match the tetgen pattern
+        files.forEach(file => {
+            if (file.startsWith('tetra_') && file.endsWith('.ply')) {
+                const filePath = path.join(directory, file);
+                fs.unlinkSync(filePath);
+                deletedCount++;
+            }
+        });
+        
+        // Also delete the .tet file if it exists
+        const tetFile = path.join(directory, 'Cube_tetrahedra.tet');
+        if (fs.existsSync(tetFile)) {
+            fs.unlinkSync(tetFile);
+            deletedCount++;
+        }
+        
+        console.log(`Deleted ${deletedCount} tetgen files`);
+        res.json({ 
+            success: true, 
+            deletedCount: deletedCount 
+        });
+        
+    } catch (error) {
+        console.error('Error deleting files:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: error.message 
+        });
+    }
 });
 
 const PORT = 3000;

@@ -26,7 +26,9 @@ renderer.domElement.style.left = "0";
 renderer.domElement.style.zIndex = "0";
 document.body.appendChild(renderer.domElement);
 
-// --- GPU CHECK ---
+// =================================================================
+// GPU CHECK
+// =================================================================
 const gl = renderer.getContext();
 const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
 if (debugInfo) {
@@ -243,75 +245,80 @@ setTimeout(() => {
 function loadCutModel() {
     const cutLoader = new PLYLoader();
 
-    cutLoader.load(
-        "models/ply/cube_test/Cube_tetrahedra.ply",
-        (geometry) => {
-            geometry.computeVertexNormals();
-
-            fetch("models/ply/cube_test/Cube_tetrahedra.tet")
-                .then(response => response.text())
-                .then(text => {
-                    if (cutMesh) {
-                        cutMesh.children.forEach(tetraMesh => {
-                            if (tetraMesh.userData.physicsBody) {
-                                physicsWorld.removeRigidBody(tetraMesh.userData.physicsBody);
-                                tetraMesh.userData.physicsBody = null;
-                            }
-                        });
-                        scene.remove(cutMesh);
-                    }
-                    if (originalMesh) {
-                        if (originalMesh.userData.physicsBody) {
-                            physicsWorld.removeRigidBody(originalMesh.userData.physicsBody);
-                            originalMesh.userData.physicsBody = null;
-                        }
-                        scene.remove(originalMesh);
-                    }
-                    const positions = geometry.attributes.position.array;
-                    const tetraGroup = new THREE.Group();
-
-                    const lines = text.trim().split('\n');
-                    const numTetrahedra = parseInt(lines[0]);
-                    for (let i = 1; i <= numTetrahedra; i++) {
-                        const [v1, v2, v3, v4] = lines[i].split(' ').map(Number);
-
-                        const verts = [
-                            positions[v1 * 3], positions[v1 * 3 + 1], positions[v1 * 3 + 2],
-                            positions[v2 * 3], positions[v2 * 3 + 1], positions[v2 * 3 + 2],
-                            positions[v3 * 3], positions[v3 * 3 + 1], positions[v3 * 3 + 2],
-                            positions[v4 * 3], positions[v4 * 3 + 1], positions[v4 * 3 + 2],
-                        ];
-
-                        const indices = [ 0, 1, 2, 0, 1, 3, 0, 2, 3, 1, 2, 3 ];
-
-                        const tetraGeometry = new THREE.BufferGeometry();
-                        tetraGeometry.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
-                        tetraGeometry.setIndex(indices);
-                        tetraGeometry.computeVertexNormals();
-
-                        const tetraMesh = new THREE.Mesh(
-                            tetraGeometry,
-                            new THREE.MeshStandardMaterial({ color: 0xff4444, wireframe: true, side: THREE.DoubleSide })
-                        );
-                        tetraGroup.add(tetraMesh);
-                    }
-
-                    tetraGroup.scale.set(2, 2, 2);
-                    tetraGroup.rotateX(-Math.PI / 2);
-
-                    cutMesh = tetraGroup;
-                    scene.add(cutMesh);
-                    currentMesh = cutMesh;
-
-                    if (ammoReady) {
-                        cutMesh.children.forEach(tetraMesh => {
-                            tetraMesh.updateWorldMatrix(true, false); 
-                            addPhysicsBody(tetraMesh, 1.0);
-                        });
-                    }
-                });
+    if (cutMesh) {
+        cutMesh.children.forEach(tetraMesh => {
+            if (tetraMesh.userData.physicsBody) {
+                physicsWorld.removeRigidBody(tetraMesh.userData.physicsBody);
+                tetraMesh.userData.physicsBody = null;
+            }
+        });
+        scene.remove(cutMesh);
+    }
+    if (originalMesh) {
+        if (originalMesh.userData.physicsBody) {
+            physicsWorld.removeRigidBody(originalMesh.userData.physicsBody);
+            originalMesh.userData.physicsBody = null;
         }
-    );
+        scene.remove(originalMesh);
+    }
+
+    fetch("models/ply/cube_test/Cube_tetrahedra.tet")
+        .then(response => response.text())
+        .then(text => {
+            const lines = text.trim().split('\n');
+            const numTetrahedra = parseInt(lines[0]);
+            
+            const tetraGroup = new THREE.Group();
+            let loadedCount = 0;
+            const totalPieces = numTetrahedra * 5; // 5 pieces per tetrahedron
+
+            for (let i = 0; i < numTetrahedra; i++) {
+                const paddedIndex = String(i).padStart(4, '0');
+                
+                // Load 4 corner pieces + 1 center piece
+                const pieceNames = ['corner0', 'corner1', 'corner2', 'corner3', 'center'];
+                
+                pieceNames.forEach(pieceName => {
+                    const filename = `models/ply/cube_test/tetra_${paddedIndex}_${pieceName}.ply`;
+                    
+                    cutLoader.load(
+                        filename,
+                        (geometry) => {
+                            geometry.computeVertexNormals();
+                            
+                            const material = new THREE.MeshStandardMaterial({ 
+                                color: 0xff4444, 
+                                wireframe: true, 
+                                side: THREE.DoubleSide 
+                            });
+                            
+                            const mesh = new THREE.Mesh(geometry, material);
+                            tetraGroup.add(mesh);
+                            
+                            loadedCount++;
+                            
+                            if (loadedCount === totalPieces) {
+                                tetraGroup.scale.set(2, 2, 2);
+                                tetraGroup.rotateX(-Math.PI / 2);
+
+                                cutMesh = tetraGroup;
+                                scene.add(cutMesh);
+                                currentMesh = cutMesh;
+
+                                if (ammoReady) {
+                                    tetraGroup.children.forEach(mesh => {
+                                        mesh.updateWorldMatrix(true, false);
+                                        addPhysicsBody(mesh, 1.0);
+                                    });
+                                }
+                                
+                                console.log(`Loaded ${totalPieces} pieces (${numTetrahedra} tetrahedra × 5 pieces each)`);
+                            }
+                        }
+                    );
+                });
+            }
+        });
 }
 
 // =================================================================
@@ -341,13 +348,12 @@ document.getElementById("cutModelBtn").addEventListener("click", async () => {
     }
 });
 
-document.getElementById("resetModelBtn").addEventListener("click", () => {
+document.getElementById("resetModelBtn").addEventListener("click", async () => {
     flying = false;
     flyingDirections = [];
 
     // Remove cut mesh if present
     if (cutMesh) {
-        // Proper cleanup
         cutMesh.children.forEach(tetraMesh => {
             if (tetraMesh.userData.physicsBody) {
                 physicsWorld.removeRigidBody(tetraMesh.userData.physicsBody);
@@ -357,6 +363,25 @@ document.getElementById("resetModelBtn").addEventListener("click", () => {
         scene.remove(cutMesh);
         cutMesh = null;
         rigidBodies = [];
+        
+        // Call the cleanup endpoint to delete generated files
+        try {
+            const response = await fetch("http://localhost:3000/api/cleanup-tetgen", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                }
+            });
+            
+            const result = await response.json();
+            if (result.success) {
+                console.log(`Cleaned up ${result.deletedCount} tetgen files`);
+            } else {
+                console.error("Cleanup failed:", result.error);
+            }
+        } catch (error) {
+            console.error("Failed to cleanup tetgen files:", error);
+        }
     }
 
     if (originalMesh && !scene.children.includes(originalMesh)) {
